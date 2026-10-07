@@ -13,3 +13,4 @@ jobs:
       - run: sudo -E env "PATH=$PATH" python -m crucible.probe
       - run: sudo -E env "PATH=$PATH" python -m pytest -q tests
       - run: sudo -E env "PATH=$PATH" python bench/spawn.py
+      - run: sudo -E env "PATH=$PATH" python bench/fork.py

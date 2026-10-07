@@ -3,3 +3,6 @@ probe: root, setuid yes, user/mount/net/ipc/uts/pid namespaces: no, no_new_privs
 tests: 12 passed, 2 skipped (network and cross-sandbox visibility need namespaces; seccomp added after this run)
 {"start_run_close": {"zygote_fork": {"median_ms": 4.1, "p95_ms": 4.66, "per_second_16_in_flight": 576.7}, "fresh_python": {"median_ms": 85.36, "p95_ms": 93.22, "per_second_16_in_flight": 27.0}, "speedup_median": 20.8}}
 {"with_numpy_preloaded": {"zygote_spawn_median_ms": 4.04, "fresh_python_import_numpy_ms": 196.7, "sandbox_pss_kb_median": null, "zygote_pss_kb": 4624}}
+# rerun at commit 5859de6 (seccomp filter added): probe seccomp true; tests 14 passed, 1 skipped (cross-sandbox visibility needs namespaces)
+{"start_run_close": {"zygote_fork": {"median_ms": 5.02, "p95_ms": 5.8, "per_second_16_in_flight": 498.3}, "fresh_python": {"median_ms": 87.02, "p95_ms": 94.63, "per_second_16_in_flight": 26.4}, "speedup_median": 17.3}}
+{"with_numpy_preloaded": {"zygote_spawn_median_ms": 5.4, "fresh_python_import_numpy_ms": 203.8, "sandbox_pss_kb_median": null, "zygote_pss_kb": 4756}}

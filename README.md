@@ -25,7 +25,7 @@ environments speaking [OpenEnv](https://github.com/huggingface/OpenEnv)'s interf
 | | Milestone | State |
 |---|---|---|
 | M0 | Sandbox runtime: per-sandbox user, namespaces, private tmpfs, limits, no capabilities, seccomp filter; a warm zygote that forks sandboxes; a probe of what the machine allows; tests that each limit holds | done |
-| M1 | Snapshot and fork a live sandbox (memory copy-on-write, its files copied), for branching | |
+| M1 | Fork a live sandbox (memory copy-on-write, its files copied), for branching | done |
 | M2 | OpenEnv-compatible server and a coding environment (hidden unit tests give the reward) | |
 | M3 | ratchet's GRPO on coding problems with sandboxed rewards, 2× T4: pass rate before/after, GPU idle time | |
 | M4 | Branching rollouts from mid-episode snapshots: cost against replaying from the start | |
@@ -81,16 +81,43 @@ With numpy preloaded a sandbox starts in 5.2 ms against 108 ms for a fresh inter
 importing it (21×), and costs 2.5 MB of proportional memory, its pages shared with the
 zygote until written.
 
-On a Kaggle notebook (4 CPUs, Python 3.13; no namespaces there): **4.1 ms** against 85 ms
-for a fresh interpreter (21×), **577 per second** against 27 with 16 in flight, and with
-numpy preloaded 4.0 ms against 197 ms (49×).
+On a Kaggle notebook (4 CPUs, Python 3.13; no namespaces there, seccomp on): **5.0 ms**
+against 87 ms for a fresh interpreter (17×), **498 per second** against 26 with 16 in flight,
+and with numpy preloaded 5.4 ms against 204 ms (38×). All tests pass there except the one
+that needs namespaces (sandboxes not seeing each other's files and processes).
 
 Not yet: CPU and memory accounting by cgroup rather than per-process limits.
+
+## M1: forking a live sandbox
+
+`branch = sandbox.fork()` returns a copy of the sandbox as it is now: its Python state
+(the process is forked, so memory is shared copy-on-write until one side writes it) and its
+workspace (copied). The two then go on independently, and either can be forked again.
+Each branch is its own process group, killed alone on a timeout without touching its
+parent or siblings. Inside a PID namespace a branch knows only its inner pid; it sends its
+first message with `SCM_CREDENTIALS`, and the kernel translates the pid into the client's
+view, the one the client can signal. Branches keep every limit and the seccomp filter
+(`tests/test_fork.py`: state and files carried over, branches diverging, branches of
+branches, a branch killed on a timeout while its siblings go on, 16 concurrent forks).
+
+Measured on 4 CPUs (`bench/fork.py`):
+
+| | |
+|---|---|
+| fork a sandbox with 0 / 64 / 256 / 1024 MB of Python state | 2.3 / 3.7 / 4.8 / 12.6 ms |
+| ... with 1 MB in 100 files / 16 MB in 100 files / 16 MB in 1,000 files | 5.8 / 14.1 / 44.3 ms |
+| 8 branches of a sandbox holding 256 MB: memory of all 9 processes | **508 MB** (2,304 MB if copied); a branch costs 31 MB until it writes, 258 MB after rewriting everything |
+| reach a state that takes 90 ms to build (imports + a 400,000-entry table): fork it vs start a new sandbox and build it again | **4.5 ms vs 138 ms (30×)** |
+
+The workspace copy is the expensive part for large workspaces (about 40 µs per file); a
+copy-on-write file layer would remove it, and is not built. Threads started by the
+sandbox's code are not carried into a branch (`fork()` copies only the calling thread).
 
 ## Run it
 
 ```
 sudo python -m pytest tests          # namespaces and per-sandbox users need root
 sudo python bench/spawn.py
+sudo python bench/fork.py
 ```
 Kaggle: `!cd /tmp && rm -rf c && git clone -q --depth 1 https://github.com/Shakhtar-Sankur/crucible c && bash c/scripts/kaggle.sh`

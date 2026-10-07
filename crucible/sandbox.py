@@ -10,6 +10,7 @@ sandbox killed (the whole PID namespace when there is one) and reports timeout=T
 
 import itertools
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -26,9 +27,10 @@ class SandboxError(RuntimeError):
 
 
 class Sandbox:
-    def __init__(self, sock, runner_pid, layers, spawn_seconds):
+    def __init__(self, sock, runner_pid, layers, spawn_seconds, workdir=None):
         self.sock, self.pid, self.layers = sock, runner_pid, layers
         self.spawn_seconds = spawn_seconds
+        self.workdir = workdir or layers.get("workdir")
         self.alive = True
 
     def _call(self, msg, timeout):
@@ -59,14 +61,37 @@ class Sandbox:
     def ping(self, timeout=5.0):
         return self._call({"op": "ping"}, timeout)
 
+    def fork(self, timeout=30.0):
+        """A copy of this sandbox as it is now: its Python state and its files. The copy and
+        this sandbox go on independently; either can be forked again."""
+        if not self.alive:
+            raise SandboxError("sandbox is closed")
+        t = time.perf_counter()
+        self.sock.settimeout(timeout)
+        wire.send(self.sock, {"op": "fork"})
+        reply, fds = wire.recv(self.sock, want_fds=1)
+        if not fds:
+            raise SandboxError(f"fork failed: {reply}")
+        sock = socket.socket(fileno=fds[0])
+        sock.settimeout(timeout)
+        hello, pid = wire.recv_creds(sock)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 0)  # only the first message needs it
+        if pid is None:
+            sock.close()
+            raise SandboxError("the branch did not identify itself")
+        return Sandbox(sock, pid, dict(self.layers), time.perf_counter() - t, workdir=hello["workdir"])
+
     def kill(self):
         if self.alive:
             self.alive = False
-            try:
-                os.kill(self.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            for kill in (os.killpg, os.kill):  # its process group: everything it started
+                try:
+                    kill(self.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
             self.sock.close()
+            if not self.layers.get("tmpfs") and self.workdir and self.workdir.startswith("/tmp/crucible-"):
+                shutil.rmtree(self.workdir, ignore_errors=True)  # no private tmpfs to vanish with it
 
     def close(self):
         if self.alive:
