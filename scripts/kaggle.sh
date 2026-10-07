@@ -11,5 +11,5 @@ echo "== tests"; python -m pytest -q tests 2>&1 | tail -15
 echo "== spawn benchmark"; python bench/spawn.py 2>&1 | tail -4
 echo "== fork benchmark"; python bench/fork.py 2>&1 | tail -5
 echo "== grading benchmark (MBPP)"
-python -c 'from crucible.tasks import download_mbpp; download_mbpp("/tmp/mbpp")' && python bench/grading.py /tmp/mbpp 2>&1 | tail -4
+python -c 'from crucible.tasks import download_mbpp; download_mbpp("/tmp/mbpp")' >/dev/null 2>&1 && python bench/grading.py /tmp/mbpp 2>/dev/null | grep "^{"
 echo "== done"

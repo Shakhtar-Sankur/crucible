@@ -22,6 +22,7 @@ import importlib
 import math
 import time
 import uuid
+import warnings
 
 from .config import Limits
 
@@ -100,10 +101,16 @@ class _Proxy:
         return _parse_value(r["stdout"].rsplit(DELIM, 1)[1])
 
 
+def _parse(code):
+    with warnings.catch_warnings():        # e.g. "invalid escape sequence" in the candidate's strings
+        warnings.simplefilter("ignore", SyntaxWarning)
+        return ast.parse(code)
+
+
 def _defined_names(code):
     """Top-level names the candidate's code binds (found by parsing, never by running)."""
     names = set()
-    for node in ast.parse(code).body:
+    for node in _parse(code).body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             names.add(node.name)
         elif isinstance(node, ast.Assign):
@@ -124,7 +131,7 @@ _TEST_MODULES = frozenset({"sys", "math", "cmath", "re", "collections", "itertoo
 def _stdlib_imports(code):
     """Top-level `import x` modules of the candidate's code that are in _TEST_MODULES."""
     out = []
-    for node in ast.parse(code).body:
+    for node in _parse(code).body:
         if isinstance(node, ast.Import):
             for a in node.names:
                 if a.asname is None and a.name.split(".")[0] in _TEST_MODULES:

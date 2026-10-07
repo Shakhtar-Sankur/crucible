@@ -1,0 +1,20 @@
+Kaggle CPU notebook, 4 CPUs, Python 3.13, kernel 6.18 (no namespaces allowed: setuid +
+no_new_privs + seccomp). crucible bb2afdf. Output of scripts/kaggle.sh (download progress
+removed; the "references" line of the grading bench was cut by the script's tail, fixed since).
+
+== probe
+{"root": true, "uid_base": 200000, "kernel": "6.18.48+", "setuid": true, "ns_user": false, "ns_mount": false,
+ "ns_net": false, "ns_ipc": false, "ns_uts": false, "ns_pid": false, "no_new_privs": true, "seccomp": true}
+== tests
+43 passed, 1 skipped in 16.48s
+== spawn benchmark
+{"start_run_close": {"zygote_fork": {"median_ms": 4.87, "p95_ms": 5.33, "per_second_16_in_flight": 450.3}, "fresh_python": {"median_ms": 85.84, "p95_ms": 90.99, "per_second_16_in_flight": 27.1}, "speedup_median": 17.6}}
+{"with_numpy_preloaded": {"zygote_spawn_median_ms": 4.79, "fresh_python_import_numpy_ms": 198.3, "sandbox_pss_kb_median": null, "zygote_pss_kb": 4704}}
+== fork benchmark
+{"fork_vs_state": [{"python_state_mb": 0, "fork_ms": 3.13}, {"python_state_mb": 64, "fork_ms": 5.11}, {"python_state_mb": 256, "fork_ms": 7.02}, {"python_state_mb": 1024, "fork_ms": 15.77}]}
+{"fork_vs_workspace": [{"workspace_files": 0, "workspace_mb": 0.0, "fork_ms": 2.67}, {"workspace_files": 100, "workspace_mb": 0.98, "fork_ms": 14.26}, {"workspace_files": 100, "workspace_mb": 15.62, "fork_ms": 20.37}, {"workspace_files": 1000, "workspace_mb": 15.62, "fork_ms": 116.77}]}
+{"memory_8_branches_of_256mb": {"parent_pss_mb_after_forking": 262.7, "branch_pss_mb_median": 31.1, "total_pss_mb_9_processes": 511.1, "if_copied_mb": 2304, "branch_after_writing_all_pss_mb": 258.7}}
+{"branch_vs_replay": {"build_state_ms": 219.6, "replay_ms_median": 215.4, "fork_ms_median": 4.75, "speedup": 45.4}}
+== grading benchmark (MBPP, 974 tasks)
+{"throughput": {"crucible_ms_per_task_median": 8.3, "crucible_tasks_per_s_sequential": 72.9, "usual_tasks_per_s_sequential": 11.9, "crucible_tasks_per_s_8_in_flight": 130.9, "usual_tasks_per_s_8_in_flight": 27.0}}
+{"reward_hacks": {"always_equal_object": {"crucible_reward": 0.0, "usual_passes": true}, "exit_before_the_tests": {"crucible_reward": 0.0, "usual_passes": true}, "forge_the_output_channel": {"crucible_reward": 0.0, "usual_passes": true}, "hang_forever": {"crucible_reward": 0.0, "usual_passes": false}, "huge_output": {"crucible_reward": 0.0, "usual_passes": false}, "inspect_the_caller_for_the_answer": {"crucible_reward": 0.0, "usual_passes": false}, "patch_builtins_assert_helpers": {"crucible_reward": 0.0, "usual_passes": false}, "return_a_generator": {"crucible_reward": 0.0, "usual_passes": false}, "sys_exit_at_import": {"crucible_reward": 0.0, "usual_passes": true}}}

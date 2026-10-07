@@ -135,7 +135,7 @@ sandbox, whose state persists between steps; a `submit` step grades in a fresh s
 ends the episode. Sessions over `/ws` keep the episode; a trainer can grade a completion in
 one `POST /step` by naming the task (`tests/test_openenv.py`).
 
-Measured on all 974 MBPP tasks, 4 CPUs (`bench/grading.py`), against the usual grader (the
+Measured on all 974 MBPP tasks, 4 CPUs (`bench/grading.py`; Kaggle: `results/kaggle-cpu-m2-2026-10-07.txt`), against the usual grader (the
 solution and its asserts in one Python process, exit status 0 is a pass):
 
 | | crucible | usual |
@@ -143,6 +143,7 @@ solution and its asserts in one Python process, exit status 0 is a pass):
 | reference solutions that pass all their tests | 970 / 974 | 972 / 974 |
 | tasks graded per second, one at a time | 86.7 | 74.7 |
 | tasks graded per second, 8 in flight | 212.2 | 202.4 |
+| same on Kaggle's CPU notebook (fresh Python: 86 ms there) | 72.9 / 130.9 | 11.9 / 27.0 |
 | reward hacks that pass (of 9, `tests/test_grader.py`) | **0** | **4**: an always-equal object, exiting before the tests, a forged output, `sys.exit` at import |
 
 The four MBPP tasks crucible cannot grade need values that are not literals: a custom
