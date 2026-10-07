@@ -26,7 +26,7 @@ environments speaking [OpenEnv](https://github.com/huggingface/OpenEnv)'s interf
 |---|---|---|
 | M0 | Sandbox runtime: per-sandbox user, namespaces, private tmpfs, limits, no capabilities, seccomp filter; a warm zygote that forks sandboxes; a probe of what the machine allows; tests that each limit holds | done |
 | M1 | Fork a live sandbox (memory copy-on-write, its files copied), for branching | done |
-| M2 | OpenEnv-compatible server and a coding environment (hidden unit tests give the reward) | |
+| M2 | OpenEnv-compatible server and a coding environment (hidden unit tests give the reward), and a grader that reward hacks cannot pass | done |
 | M3 | ratchet's GRPO on coding problems with sandboxed rewards, 2× T4: pass rate before/after, GPU idle time | |
 | M4 | Branching rollouts from mid-episode snapshots: cost against replaying from the start | |
 | M5 | Write-up | |
@@ -113,11 +113,51 @@ The workspace copy is the expensive part for large workspaces (about 40 µs per 
 copy-on-write file layer would remove it, and is not built. Threads started by the
 sandbox's code are not carried into a branch (`fork()` copies only the calling thread).
 
+## M2: a coding environment, and grading that cannot be gamed
+
+RL against unit tests invites reward hacking: when the tests run in the same process as the
+model's code, exiting early, returning an object whose `__eq__` always says True, or
+printing a fake result scores as well as a right answer. In crucible's grader
+(`crucible/grader.py`) they never share a process:
+
+- the candidate's code runs in a sandbox, and only there;
+- each test's `assert` is evaluated in the trusted process, which never runs candidate
+  code: a call to a function the candidate defined is sent to the sandbox, and only a
+  *value* comes back, as a Python literal parsed with `ast.literal_eval` (dict, list, set
+  and tuple subclasses such as `Counter` are sent as their plain equivalents);
+- anything that is not a clean value (an exception, a timeout, a dead sandbox, output that
+  is not a literal) fails that test. The reward is the fraction of tests passed.
+
+The environment (`crucible/envs/coding.py`) is an [OpenEnv](https://github.com/huggingface/OpenEnv)
+environment served by OpenEnv's own `create_app` (`python -m crucible.envs.server --tasks
+mbpp.jsonl`): `reset()` gives a task's prompt; a `run` step executes code in the episode's
+sandbox, whose state persists between steps; a `submit` step grades in a fresh sandbox and
+ends the episode. Sessions over `/ws` keep the episode; a trainer can grade a completion in
+one `POST /step` by naming the task (`tests/test_openenv.py`).
+
+Measured on all 974 MBPP tasks, 4 CPUs (`bench/grading.py`), against the usual grader (the
+solution and its asserts in one Python process, exit status 0 is a pass):
+
+| | crucible | usual |
+|---|---|---|
+| reference solutions that pass all their tests | 970 / 974 | 972 / 974 |
+| tasks graded per second, one at a time | 86.7 | 74.7 |
+| tasks graded per second, 8 in flight | 212.2 | 202.4 |
+| reward hacks that pass (of 9, `tests/test_grader.py`) | **0** | **4**: an always-equal object, exiting before the tests, a forged output, `sys.exit` at import |
+
+The four MBPP tasks crucible cannot grade need values that are not literals: a custom
+class as the result (601) or as a test's input (927, 367: `Node`), and a type as an
+argument (533). They fail closed, as failed tests, and `grader.verify()` (each task's
+reference solution through the grader) leaves them out of the training set. The usual
+grader's two misses are reference solutions that fail their own tests.
+
 ## Run it
 
 ```
 sudo python -m pytest tests          # namespaces and per-sandbox users need root
 sudo python bench/spawn.py
 sudo python bench/fork.py
+sudo python bench/grading.py <dir with MBPP's *.jsonl>   # python -c 'from crucible.tasks import download_mbpp; download_mbpp("mbpp")'
+pip install openenv && python -m crucible.envs.server   # the coding environment over HTTP/WebSocket
 ```
 Kaggle: `!cd /tmp && rm -rf c && git clone -q --depth 1 https://github.com/Shakhtar-Sankur/crucible c && bash c/scripts/kaggle.sh`
