@@ -1,0 +1,14 @@
+Kaggle "GPU T4 x2", crucible 4782878 | ratchet 12ae06b | relay b452d52; RUN=smoke (3 steps, 64 test tasks).
+Qwen2.5-Coder-0.5B-Instruct; relay generates on GPU 1, the trainer updates on GPU 0, one step ahead.
+Sandboxes without namespaces (Kaggle): setuid + no_new_privs + seccomp. Download progress removed.
+
+{"phase": "tasks", "test": 64, "test_dropped": ["mbpp/123", "mbpp/367"]}
+{"phase": "tasks", "train": 471, "train_dropped": ["mbpp/601", "mbpp/927", "mbpp/533"]}
+{"phase": "eval", "when": "before", "n": 64, "pass_at_1": 0.328125, "mean_test_fraction": 0.4166666666666667, "truncated": 0.0, "mean_tokens": 111.765625, "generate_seconds": 13.46926047799991, "reward_seconds": 2.586327263000044, "compile_errors": 0.109375, "usual_pass": 0.328125, "usual_only": 0, "crucible_only": 0}
+{"step": 1, "reward": 0.4739583333333333, "trained_samples": 48, "mean_length": 143.984375, "max_length": 361, "logprob_gap_max": 0.01396167278289795, "time_generate": 21.292130486999895, "time_train": 26.687268518999986, "time_sync": 0.29132322600003135, "time_step": 26.980448604999992, "answers": 64, "reward_seconds": 6.075812017999965, "pass_all": 0.421875, "compile_errors": 0.21875, "usual_pass": 0.421875, "usual_only": 0, "crucible_only": 0}
+{"step": 2, "reward": 0.24479166666666666, "trained_samples": 40, "mean_length": 214.96875, "max_length": 384, "time_generate": 20.51063310500001, "time_train": 25.111040437999918, "time_step": 25.511190851000038, "answers": 64, "reward_seconds": 3.1955277619999833, "pass_all": 0.21875, "compile_errors": 0.5, "usual_pass": 0.21875, "usual_only": 0, "crucible_only": 0}
+{"step": 3, "reward": 0.5104166666666666, "trained_samples": 56, "mean_length": 211.84375, "max_length": 384, "time_train": 35.83082878899995, "time_step": 36.225791204000075, "answers": 64, "reward_seconds": 2.8409595729999637, "pass_all": 0.421875, "compile_errors": 0.296875, "usual_pass": 0.421875, "usual_only": 0, "crucible_only": 0}
+{"phase": "eval", "when": "after", "n": 64, "pass_at_1": 0.3125, "mean_test_fraction": 0.3958333333333333, "truncated": 0.0, "mean_tokens": 137.46875, "generate_seconds": 15.800187240000014, "reward_seconds": 2.511025843000084, "compile_errors": 0.171875, "usual_pass": 0.3125, "usual_only": 0, "crucible_only": 0}
+summary: pass@1 32.8% -> 31.2% of 64 (3 steps: plumbing only); usual-only passes 0 of 192 training answers;
+step median 27.0 s, grading (crucible + the usual grader, sandboxed) median 3.2 s per 64 answers.
+mbpp/123 dropped on Kaggle only: its reference solution exceeds the per-call time limit on Kaggle's CPUs.
