@@ -1,0 +1,5 @@
+# Kaggle notebook, CPU (4 cores), Python 3.13.15, kernel 6.18.48+, commit df83b9d
+probe: root, setuid yes, user/mount/net/ipc/uts/pid namespaces: no, no_new_privs yes
+tests: 12 passed, 2 skipped (network and cross-sandbox visibility need namespaces; seccomp added after this run)
+{"start_run_close": {"zygote_fork": {"median_ms": 4.1, "p95_ms": 4.66, "per_second_16_in_flight": 576.7}, "fresh_python": {"median_ms": 85.36, "p95_ms": 93.22, "per_second_16_in_flight": 27.0}, "speedup_median": 20.8}}
+{"with_numpy_preloaded": {"zygote_spawn_median_ms": 4.04, "fresh_python_import_numpy_ms": 196.7, "sandbox_pss_kb_median": null, "zygote_pss_kb": 4624}}

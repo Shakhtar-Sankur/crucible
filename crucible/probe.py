@@ -5,7 +5,7 @@ import json
 import os
 import sys
 
-from . import _sys
+from . import _sys, seccomp
 
 UID_BASE = 200000
 _NS = {"mount": _sys.CLONE_NEWNS, "net": _sys.CLONE_NEWNET, "ipc": _sys.CLONE_NEWIPC,
@@ -65,6 +65,18 @@ def features():
                     raise OSError("not pid 1")
         f[f"ns_{name}"] = _try(attempt)
     f["no_new_privs"] = _try(lambda: _sys.prctl(_sys.PR_SET_NO_NEW_PRIVS, 1))
+
+    def filtered():
+        _sys.prctl(_sys.PR_SET_NO_NEW_PRIVS, 1)
+        if not seccomp.install():
+            raise OSError("unsupported architecture")
+        import socket
+        try:
+            socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        except PermissionError:
+            return
+        raise OSError("socket() was not refused")
+    f["seccomp"] = _try(filtered)
     return f
 
 

@@ -46,16 +46,34 @@ def test_output_is_capped(zygote):
 
 
 def test_no_network(zygote):
-    need(zygote, "ns_net")
+    if not (zygote.features.get("ns_net") or zygote.features.get("seccomp")):
+        pytest.skip("neither a network namespace nor seccomp on this machine")
     with zygote.spawn() as sb:
         r = sb.exec("import socket\n"
                     "s = socket.socket()\n"
                     "s.settimeout(2)\n"
                     "s.connect(('1.1.1.1', 53))")
-        assert not r["ok"] and r["error"]["type"] in ("OSError", "TimeoutError", "ConnectionRefusedError")
-        # its own network namespace: only a loopback interface, and it is down
-        r = sb.exec("import socket; print(sorted(n for _, n in socket.if_nameindex()))")
-        assert r["stdout"].strip() in ("['lo']", "[]")
+        assert not r["ok"] and r["error"]["type"] in ("OSError", "TimeoutError", "ConnectionRefusedError",
+                                                     "PermissionError")
+        if zygote.features.get("ns_net"):
+            # its own network namespace: only a loopback interface, and it is down
+            r = sb.exec("print(sorted(l.split(':')[0].strip() for l in open('/proc/self/net/dev').readlines()[2:]))")
+            assert r["stdout"].strip() in ("['lo']", "[]")
+
+
+def test_seccomp_refuses_what_a_sandbox_never_needs(zygote):
+    need(zygote, "seccomp")
+    with zygote.spawn() as sb:
+        assert sb.layers["seccomp"]
+        r = sb.exec("import socket; socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)")
+        assert r["error"]["type"] == "PermissionError"
+        r = sb.exec("import socket; a, b = socket.socketpair(); a.sendall(b'x'); print(b.recv(1))")
+        assert r["stdout"] == "b'x'\n"                      # local Unix sockets still work
+        r = sb.exec("import ctypes; l = ctypes.CDLL(None, use_errno=True)\n"
+                    "print(l.unshare(0x40000000), ctypes.get_errno())")  # CLONE_NEWNET
+        assert r["stdout"].split() == ["-1", "1"]            # EPERM
+        r = sb.exec("import subprocess; print(subprocess.run(['true']).returncode)")
+        assert r["stdout"] == "0\n"                         # ordinary programs still run
 
 
 def test_memory_limit(zygote):

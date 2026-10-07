@@ -15,7 +15,7 @@ import ctypes
 import os
 import signal
 
-from . import _sys
+from . import _sys, seccomp
 
 WORKDIR = "/tmp/work"
 _CAP_HEADER_V3 = 0x20080522
@@ -124,6 +124,10 @@ def finish(limits, layers, as_pid1):
         layers["no_capabilities"] = False
     _sys.prctl(_sys.PR_SET_NO_NEW_PRIVS, 1)
     layers["no_new_privs"] = True
+    try:
+        layers["seccomp"] = seccomp.install(allow_network=limits.network)
+    except OSError:
+        layers["seccomp"] = False
     signal.signal(signal.SIGCHLD, signal.SIG_DFL)
     os.chdir(layers["workdir"])
     return layers
