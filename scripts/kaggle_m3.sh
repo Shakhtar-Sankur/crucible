@@ -12,6 +12,9 @@ rm -rf crucible ratchet
 git clone -q --depth 1 https://github.com/Shakhtar-Sankur/crucible
 git clone -q --recursive https://github.com/Shakhtar-Sankur/ratchet
 echo "== crucible M3 ($RUN): crucible $(git -C crucible log -1 --format=%h) | ratchet $(git -C ratchet log -1 --format=%h) | relay $(git -C ratchet/relay log -1 --format=%h)"
+if ! command -v nvidia-smi >/dev/null || [ "$(nvidia-smi -L | wc -l)" -lt 2 ]; then
+  echo "== needs two GPUs: Settings -> Accelerator -> \"GPU T4 x2\" (and Internet on), then run again"; exit 1
+fi
 nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader
 export PATH=/usr/local/cuda/bin:$PATH
 (cd ratchet && scripts/build_relay.sh 75 2>&1 | tail -1)
