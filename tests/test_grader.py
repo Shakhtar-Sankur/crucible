@@ -103,3 +103,13 @@ def test_dict_subclasses_come_back_as_plain_values(zygote):
 def test_only_listed_modules_reach_the_trusted_side():
     code = "import sys\nimport math\nimport os\nimport antigravity\nimport numpy\nfrom x import y"
     assert grader._stdlib_imports(code) == ["sys", "math"]
+
+
+def test_the_usual_verdict_in_a_sandbox_matches_the_usual_grader(zygote):
+    """grade_in_one_process reproduces the usual grader (and its blind spots), sandboxed."""
+    add = next(t for t in BUILTIN if t.task_id == "add")
+    assert grader.grade_in_one_process(zygote, add, add.reference) is True
+    assert grader.grade_in_one_process(zygote, add, "def add(a, b): return a - b") is False
+    for name in ("always_equal_object", "exit_before_the_tests", "sys_exit_at_import"):
+        assert grader.grade_in_one_process(zygote, add, HACKS[name]) is True, name
+    assert grader.grade_in_one_process(zygote, add, HACKS["hang_forever"], timeout=1.0) is False

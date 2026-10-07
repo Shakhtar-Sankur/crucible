@@ -162,3 +162,5 @@ sudo python bench/grading.py <dir with MBPP's *.jsonl>   # python -c 'from cruci
 pip install openenv && python -m crucible.envs.server   # the coding environment over HTTP/WebSocket
 ```
 Kaggle: `!cd /tmp && rm -rf c && git clone -q --depth 1 https://github.com/Shakhtar-Sankur/crucible c && bash c/scripts/kaggle.sh`
+
+M3 (GRPO on MBPP with ratchet, Kaggle "GPU T4 x2"): `!cd /tmp && rm -rf c && git clone -q --depth 1 https://github.com/Shakhtar-Sankur/crucible c && RUN=smoke bash c/scripts/kaggle_m3.sh` (`RUN=full` for the measured run)

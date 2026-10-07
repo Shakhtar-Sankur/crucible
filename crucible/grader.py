@@ -20,6 +20,8 @@ be checked with their reference solution first (`verify`)."""
 import ast
 import importlib
 import math
+import os
+import sys
 import time
 import uuid
 import warnings
@@ -194,6 +196,23 @@ def grade(zygote, task, code, limits=None, call_timeout=5.0, setup_timeout=10.0)
     out["reward"] = out["passed"] / total if total else 0.0
     out["seconds"] = time.perf_counter() - t0
     return out
+
+
+def grade_in_one_process(zygote, task, code, limits=None, timeout=10.0):
+    """The usual grader's verdict, for comparison: the solution followed by its asserts in
+    one Python process, a pass if it exits with status 0. That process runs inside a
+    sandbox (a child of the sandbox's runner, its output kept from the caller), so asking
+    what the usual grader would have said never runs model code unsandboxed. Returns True
+    or False."""
+    src = (task.setup + "\n" if task.setup else "") + code + "\n" + "\n".join(task.tests) + "\n"
+    with zygote.spawn(limits or Limits()) as sb:
+        # the interpreter itself, resolved here: a venv's link to it may live where the sandbox
+        # cannot see it (its /tmp is its own); the code needs only the standard library
+        r = sb.exec("import subprocess\n"
+                    f"__crucible_p = subprocess.run([{os.path.realpath(sys.executable)!r}, '-c', {src!r}], capture_output=True, "
+                    f"timeout={timeout!r})\n"
+                    f"print({DELIM!r} + str(__crucible_p.returncode), end='')", timeout=timeout + 5)
+    return bool(r["ok"]) and r["stdout"].rsplit(DELIM, 1)[-1] == "0"
 
 
 def verify(zygote, tasks, limits=None):
