@@ -27,7 +27,7 @@ environments speaking [OpenEnv](https://github.com/huggingface/OpenEnv)'s interf
 | M0 | Sandbox runtime: per-sandbox user, namespaces, private tmpfs, limits, no capabilities, seccomp filter; a warm zygote that forks sandboxes; a probe of what the machine allows; tests that each limit holds | done |
 | M1 | Fork a live sandbox (memory copy-on-write, its files copied), for branching | done |
 | M2 | OpenEnv-compatible server and a coding environment (hidden unit tests give the reward), and a grader that reward hacks cannot pass | done |
-| M3 | ratchet's GRPO on coding problems with sandboxed rewards, 2× T4: pass rate before/after, GPU idle time | |
+| M3 | ratchet's GRPO on coding problems with sandboxed rewards, 2× T4: pass rate before/after, GPU idle time | done |
 | M4 | Branching rollouts from mid-episode snapshots: cost against replaying from the start | |
 | M5 | Write-up | |
 
@@ -151,6 +151,43 @@ class as the result (601) or as a test's input (927, 367: `Node`), and a type as
 argument (533). They fail closed, as failed tests, and `grader.verify()` (each task's
 reference solution through the grader) leaves them out of the training set. The usual
 grader's two misses are reference solutions that fail their own tests.
+
+## M3: GRPO on coding problems, rewarded in the sandbox
+
+ratchet's GRPO trains Qwen2.5-Coder-0.5B-Instruct on MBPP's 471 gradable training tasks,
+with every reward from crucible's grader (`crucible/rl/mbpp_grpo.py`). relay generates on
+one T4 while the trainer updates on the other, one step ahead; each step is 8 tasks × 8
+answers, graded in parallel in sandboxes. Every answer is also graded, in a sandbox, by the
+usual grader, to count the rewards it would have given that crucible did not. One run of
+100 steps on Kaggle's 2× T4 (`results/kaggle-m3-full-2026-10-08.txt`):
+
+| | before | after 100 steps |
+|---|---|---|
+| pass@1 on 499 MBPP test tasks (greedy) | 34.9% (174) | **38.9% (194)** |
+| tests passed | 41.8% | 47.2% |
+| answers that do not parse | 12.4% (62) | 0.2% (1) |
+| mean answer length | 117 tokens | 54 tokens |
+
+What the numbers do and do not show:
+
+- **The gain is +4.0 points from one run and one seed.** Unpaired, that is 1.3 standard
+  errors; the eval did not keep per-task outcomes, so a paired test is not possible from
+  this log. Treat it as a signal, not a result, until more seeds agree.
+- **Much of it is format.** Unparseable answers fell from 62 to 1 and answers halved in
+  length: the policy learned to emit just the function. How much of the 20 extra passes is
+  better code rather than cleaner output, this run cannot separate.
+- **No reward hacking appeared to stop.** crucible and the usual grader agreed on all 6,400
+  training answers and on both evaluations (0 usual-only passes). At 0.5B parameters and
+  100 steps the policy never found a hack, so this run does not exercise the grader's
+  defences; M2's adversarial tests do.
+- **The trainer is the bottleneck.** On the logged steps the trainer's GPU is busy 95–99%
+  of each step and the generator's a median 64% (40–86%); a step takes a median 22.3 s.
+  Grading both ways takes a median 2.9 s per 64 answers and overlaps training.
+- **Fewer answers carry signal as training goes on.** A group whose 8 answers all score
+  the same has no advantage to learn from: trained samples per step fall from 40–56 early
+  to 16–24 by steps 60–90.
+- The trainer–engine log-probability gap was measured only on step 1 (max 0.011), the one
+  step with fresh samples; one step ahead, every later sample is one update behind.
 
 ## Run it
 
