@@ -159,34 +159,43 @@ with every reward from crucible's grader (`crucible/rl/mbpp_grpo.py`). relay gen
 one T4 while the trainer updates on the other, one step ahead; each step is 8 tasks × 8
 answers, graded in parallel in sandboxes. Every answer is also graded, in a sandbox, by the
 usual grader, to count the rewards it would have given that crucible did not. 100 steps on
-Kaggle's 2× T4, seed 0 (`results/kaggle-m3-seed0-2026-10-08.txt`; an earlier run of the same
-seed without per-task outcomes, `results/kaggle-m3-full-2026-10-08.txt`, also ended at 38.9%):
+Kaggle's 2× T4, once per seed (`results/kaggle-m3-seed0-2026-10-08.txt`,
+`results/kaggle-m3-seed1-2026-10-08.txt`; an earlier seed-0 run without per-task outcomes,
+`results/kaggle-m3-full-2026-10-08.txt`, also ended at 38.9%). Evaluation is greedy, so
+"before" is the same for every seed:
 
-| | before | after 100 steps |
-|---|---|---|
-| pass@1 on 499 MBPP test tasks (greedy) | 34.9% (174) | **38.9% (194)** |
-| tests passed | 41.8% | 46.4% |
-| answers that do not parse | 12.4% (62) | 0.4% (2) |
-| mean answer length | 117 tokens | 68 tokens |
+| | before | after, seed 0 | after, seed 1 |
+|---|---|---|---|
+| pass@1 on 499 MBPP test tasks (greedy) | 34.9% (174) | **38.9% (194)** | **38.1% (190)** |
+| tests passed | 41.8% | 46.4% | 46.4% |
+| answers that do not parse | 12.4% (62) | 0.4% (2) | 0% |
+| mean answer length | 117 tokens | 68 tokens | 143 tokens |
+| tasks fixed / broken (of the same 499) | | 44 / 24 | 48 / 32 |
+| McNemar's exact test, this seed alone | | p = 0.02 | p = 0.09 |
 
-Task by task, on the same 499 problems: 150 pass both before and after, **44 are fixed** and 24
-break, 281 fail both. McNemar's exact test on the 44 against 24: **p = 0.02**.
+**Pooled over the seeds** (`python scripts/pool_m3.py results/kaggle-m3-seed*.txt`): mean
+pass@1 **38.5%, +3.6 points**. Tasks are the independent unit, so each task's change is
+averaged over seeds and a paired sign-flip test over the 499 tasks asks whether the mean
+change could be zero: **p = 0.02**. 26 tasks are fixed in both seeds and 15 broken in both.
 
 What the numbers do and do not show:
 
-- **It is significant for one seed, and mostly better code.** Of the 44 tasks fixed, 35
-  already parsed before and failed their tests; only 9 were answers that did not parse. So
-  most of the gain is correctness, not format, even though unparseable answers also fell from
-  62 to 2 and answers got shorter. (An earlier version of this section, written before the
-  per-task outcomes existed, guessed the opposite.)
-- **The cost is real too:** 24 tasks that passed before fail after. Seeds 1 and 2 will show
-  whether the net gain holds; until then this is one seed.
+- **The gain holds across seeds, and it is mostly better code.** Of the tasks fixed, 35 of
+  44 (seed 0) and 39 of 48 (seed 1) already parsed before and failed their tests; only 9 in
+  each were answers that did not parse. So most of the gain is correctness, not format.
+  (An earlier version of this section, written before the per-task outcomes existed,
+  guessed the opposite.) Shorter answers were not part of it: seed 0's got shorter (68
+  tokens), seed 1's longer (143).
+- **The cost is real too:** 24 and 32 tasks that passed before fail after. One seed alone is
+  not always significant (seed 1: p = 0.09); the pooled test is the claim.
 - **No reward hacking appeared to stop.** crucible and the usual grader agreed on all 6,400
-  training answers and on both evaluations (0 usual-only passes). At 0.5B parameters and
+  training answers in seed 0 and on 6,398 in seed 1 (2 answers at step 3 that the usual
+  grader passes and crucible does not), and on every evaluation (0 usual-only passes). At 0.5B parameters and
   100 steps the policy never found a hack, so this run does not exercise the grader's
   defences; M2's adversarial tests do.
 - **The trainer is the bottleneck.** On the logged steps the trainer's GPU is busy 95–99%
-  of each step and the generator's a median 64% (40–86%); a step takes a median 22.3 s.
+  of each step and the generator's a median 64% (40–86%); a step takes a median 22.3 s
+  (23.3 s and 25.9 s over all 100 steps of seeds 0 and 1).
   Grading both ways takes a median 2.9 s per 64 answers and overlaps training.
 - **Fewer answers carry signal as training goes on.** A group whose 8 answers all score
   the same has no advantage to learn from: trained samples per step fall from 40–56 early
@@ -205,4 +214,4 @@ pip install openenv && python -m crucible.envs.server   # the coding environment
 ```
 Kaggle: `!cd /tmp && rm -rf c && git clone -q --depth 1 https://github.com/Shakhtar-Sankur/crucible c && bash c/scripts/kaggle.sh`
 
-M3 (GRPO on MBPP with ratchet, Kaggle "GPU T4 x2"): `!cd /tmp && rm -rf c && git clone -q --depth 1 https://github.com/Shakhtar-Sankur/crucible c && RUN=smoke bash c/scripts/kaggle_m3.sh` (`RUN=full` for the measured run; `SEED=1`, `SEED=2` for more seeds. Each run ends with a paired before/after comparison over the same tasks, with McNemar's exact test, and the per-task results as bit strings so that seeds can be pooled)
+M3 (GRPO on MBPP with ratchet, Kaggle "GPU T4 x2"): `!cd /tmp && rm -rf c && git clone -q --depth 1 https://github.com/Shakhtar-Sankur/crucible c && RUN=smoke bash c/scripts/kaggle_m3.sh` (`RUN=full` for the measured run; `SEED=1`, `SEED=2` for more seeds. Each run ends with a paired before/after comparison over the same tasks, with McNemar's exact test, and the per-task results as bit strings; `python scripts/pool_m3.py results/kaggle-m3-seed*.txt` pools the seeds)
