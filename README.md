@@ -27,7 +27,7 @@ environments speaking [OpenEnv](https://github.com/huggingface/OpenEnv)'s interf
 | M0 | Sandbox runtime: per-sandbox user, namespaces, private tmpfs, limits, no capabilities, seccomp filter; a warm zygote that forks sandboxes; a probe of what the machine allows; tests that each limit holds | done |
 | M1 | Fork a live sandbox (memory copy-on-write, its files copied), for branching | done |
 | M2 | OpenEnv-compatible server and a coding environment (hidden unit tests give the reward), and a grader that reward hacks cannot pass | done |
-| M3 | ratchet's GRPO on coding problems with sandboxed rewards, 2× T4: pass rate before/after, GPU idle time | done |
+| M3 | ratchet's GRPO on coding problems with sandboxed rewards, 2× T4: MBPP pass@1 34.9% → 38.6% (mean of 3 seeds, p = 0.013), GPU idle time | done |
 | M4 | Branching rollouts from mid-episode snapshots: cost against replaying from the start | |
 | M5 | Write-up | |
 
@@ -160,42 +160,45 @@ one T4 while the trainer updates on the other, one step ahead; each step is 8 ta
 answers, graded in parallel in sandboxes. Every answer is also graded, in a sandbox, by the
 usual grader, to count the rewards it would have given that crucible did not. 100 steps on
 Kaggle's 2× T4, once per seed (`results/kaggle-m3-seed0-2026-10-08.txt`,
-`results/kaggle-m3-seed1-2026-10-08.txt`; an earlier seed-0 run without per-task outcomes,
-`results/kaggle-m3-full-2026-10-08.txt`, also ended at 38.9%). Evaluation is greedy, so
+`results/kaggle-m3-seed1-2026-10-08.txt`, `results/kaggle-m3-seed2-2026-10-08.txt`; an
+earlier seed-0 run without per-task outcomes, `results/kaggle-m3-full-2026-10-08.txt`, also
+ended at 38.9%). Evaluation is greedy, so
 "before" is the same for every seed:
 
-| | before | after, seed 0 | after, seed 1 |
-|---|---|---|---|
-| pass@1 on 499 MBPP test tasks (greedy) | 34.9% (174) | **38.9% (194)** | **38.1% (190)** |
-| tests passed | 41.8% | 46.4% | 46.4% |
-| answers that do not parse | 12.4% (62) | 0.4% (2) | 0% |
-| mean answer length | 117 tokens | 68 tokens | 143 tokens |
-| tasks fixed / broken (of the same 499) | | 44 / 24 | 48 / 32 |
-| McNemar's exact test, this seed alone | | p = 0.02 | p = 0.09 |
+| | before | after, seed 0 | after, seed 1 | after, seed 2 |
+|---|---|---|---|---|
+| pass@1 on 499 MBPP test tasks (greedy) | 34.9% (174) | **38.9% (194)** | **38.1% (190)** | **38.9% (194)** |
+| tests passed | 41.8% | 46.4% | 46.4% | 45.7% |
+| answers that do not parse | 12.4% (62) | 0.4% (2) | 0% | 0.2% (1) |
+| mean answer length | 117 tokens | 68 tokens | 143 tokens | 71 tokens |
+| tasks fixed / broken (of the same 499) | | 44 / 24 | 48 / 32 | 48 / 28 |
+| McNemar's exact test, this seed alone | | p = 0.02 | p = 0.09 | p = 0.03 |
 
 **Pooled over the seeds** (`python scripts/pool_m3.py results/kaggle-m3-seed*.txt`): mean
-pass@1 **38.5%, +3.6 points**. Tasks are the independent unit, so each task's change is
+pass@1 **38.6%, +3.7 points**. Tasks are the independent unit, so each task's change is
 averaged over seeds and a paired sign-flip test over the 499 tasks asks whether the mean
-change could be zero: **p = 0.02**. 26 tasks are fixed in both seeds and 15 broken in both.
+change could be zero: **p = 0.013**. 22 tasks are fixed in all three seeds and 14 broken in
+all three.
 
 What the numbers do and do not show:
 
 - **The gain holds across seeds, and it is mostly better code.** Of the tasks fixed, 35 of
-  44 (seed 0) and 39 of 48 (seed 1) already parsed before and failed their tests; only 9 in
-  each were answers that did not parse. So most of the gain is correctness, not format.
+  44, 39 of 48 and 41 of 48 already parsed before and failed their tests; only 7 to 9 per
+  seed were answers that did not parse. So most of the gain is correctness, not format.
   (An earlier version of this section, written before the per-task outcomes existed,
-  guessed the opposite.) Shorter answers were not part of it: seed 0's got shorter (68
-  tokens), seed 1's longer (143).
-- **The cost is real too:** 24 and 32 tasks that passed before fail after. One seed alone is
-  not always significant (seed 1: p = 0.09); the pooled test is the claim.
+  guessed the opposite.) Shorter answers were not part of it: seeds 0 and 2 got shorter
+  (68 and 71 tokens), seed 1 longer (143).
+- **The cost is real too:** 24, 32 and 28 tasks that passed before fail after. One seed
+  alone is not always significant (seed 1: p = 0.09); the pooled test is the claim.
 - **No reward hacking appeared to stop.** crucible and the usual grader agreed on all 6,400
-  training answers in seed 0 and on 6,398 in seed 1 (2 answers at step 3 that the usual
-  grader passes and crucible does not), and on every evaluation (0 usual-only passes). At 0.5B parameters and
-  100 steps the policy never found a hack, so this run does not exercise the grader's
-  defences; M2's adversarial tests do.
+  training answers in seeds 0 and 2, on 6,398 in seed 1 (2 answers at step 3 that the usual
+  grader passes and crucible does not; the step log keeps counts, not the answers), and on
+  every evaluation (0 usual-only passes). At 0.5B parameters and 100 steps the policy found
+  no hack it kept using, so these runs do not exercise the grader's defences; M2's
+  adversarial tests do.
 - **The trainer is the bottleneck.** On the logged steps the trainer's GPU is busy 95–99%
   of each step and the generator's a median 64% (40–86%); a step takes a median 22.3 s
-  (23.3 s and 25.9 s over all 100 steps of seeds 0 and 1).
+  (23.3 s, 25.9 s and 19.2 s over all 100 steps of seeds 0, 1 and 2).
   Grading both ways takes a median 2.9 s per 64 answers and overlaps training.
 - **Fewer answers carry signal as training goes on.** A group whose 8 answers all score
   the same has no advantage to learn from: trained samples per step fall from 40–56 early
