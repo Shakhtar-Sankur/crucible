@@ -158,24 +158,29 @@ ratchet's GRPO trains Qwen2.5-Coder-0.5B-Instruct on MBPP's 471 gradable trainin
 with every reward from crucible's grader (`crucible/rl/mbpp_grpo.py`). relay generates on
 one T4 while the trainer updates on the other, one step ahead; each step is 8 tasks × 8
 answers, graded in parallel in sandboxes. Every answer is also graded, in a sandbox, by the
-usual grader, to count the rewards it would have given that crucible did not. One run of
-100 steps on Kaggle's 2× T4 (`results/kaggle-m3-full-2026-10-08.txt`):
+usual grader, to count the rewards it would have given that crucible did not. 100 steps on
+Kaggle's 2× T4, seed 0 (`results/kaggle-m3-seed0-2026-10-08.txt`; an earlier run of the same
+seed without per-task outcomes, `results/kaggle-m3-full-2026-10-08.txt`, also ended at 38.9%):
 
 | | before | after 100 steps |
 |---|---|---|
 | pass@1 on 499 MBPP test tasks (greedy) | 34.9% (174) | **38.9% (194)** |
-| tests passed | 41.8% | 47.2% |
-| answers that do not parse | 12.4% (62) | 0.2% (1) |
-| mean answer length | 117 tokens | 54 tokens |
+| tests passed | 41.8% | 46.4% |
+| answers that do not parse | 12.4% (62) | 0.4% (2) |
+| mean answer length | 117 tokens | 68 tokens |
+
+Task by task, on the same 499 problems: 150 pass both before and after, **44 are fixed** and 24
+break, 281 fail both. McNemar's exact test on the 44 against 24: **p = 0.02**.
 
 What the numbers do and do not show:
 
-- **The gain is +4.0 points from one run and one seed.** Unpaired, that is 1.3 standard
-  errors; the eval did not keep per-task outcomes, so a paired test is not possible from
-  this log. Treat it as a signal, not a result, until more seeds agree.
-- **Much of it is format.** Unparseable answers fell from 62 to 1 and answers halved in
-  length: the policy learned to emit just the function. How much of the 20 extra passes is
-  better code rather than cleaner output, this run cannot separate.
+- **It is significant for one seed, and mostly better code.** Of the 44 tasks fixed, 35
+  already parsed before and failed their tests; only 9 were answers that did not parse. So
+  most of the gain is correctness, not format, even though unparseable answers also fell from
+  62 to 2 and answers got shorter. (An earlier version of this section, written before the
+  per-task outcomes existed, guessed the opposite.)
+- **The cost is real too:** 24 tasks that passed before fail after. Seeds 1 and 2 will show
+  whether the net gain holds; until then this is one seed.
 - **No reward hacking appeared to stop.** crucible and the usual grader agreed on all 6,400
   training answers and on both evaluations (0 usual-only passes). At 0.5B parameters and
   100 steps the policy never found a hack, so this run does not exercise the grader's
