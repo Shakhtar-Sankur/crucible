@@ -17,7 +17,9 @@ crucible does not are counted every step ("usual_only"): the reward the usual gr
 have given wrongly. Evaluation is greedy pass@1 (all tests pass) before and after."""
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -109,7 +111,39 @@ def evaluate(engine, tok, tasks, rewarder, max_new, relay):
            "truncated": sum(c.finish == relay.FINISH_LENGTH for c in comps) / n,
            "mean_tokens": sum(len(c.tokens) for c in comps) / n, "generate_seconds": gen_s,
            **{k: v for k, v in rewarder.last.items() if k != "pass_all"}}
+    # Each task's outcome, in the order of `tasks`, so two evaluations can be paired.
+    rec["per_task"] = [{"id": t.task_id, "pass": g["passed"] == g["total"], "fraction": round(g["reward"], 4),
+                        "parsed": g["compile_error"] is None} for t, (g, _) in zip(tasks, res)]
     return rec
+
+
+def mcnemar_p(b, c):
+    """Exact two-sided McNemar test: b tasks only one evaluation passes, c only the other."""
+    n = b + c
+    if n == 0:
+        return 1.0
+    tail = sum(math.comb(n, k) for k in range(min(b, c) + 1)) / 2 ** n
+    return min(1.0, 2 * tail)
+
+
+def paired(before, after):
+    """Compares two evaluations of the same tasks, task by task. A task 'fixed' passes only
+    after; it is split by why it failed before: its answer did not parse, or it parsed and
+    failed tests. The bit strings (1 = passed, in task order) let runs be pooled later."""
+    assert [x["id"] for x in before] == [x["id"] for x in after], "evaluations are of different tasks"
+    both = sum(x["pass"] and y["pass"] for x, y in zip(before, after))
+    fixed = [(x, y) for x, y in zip(before, after) if y["pass"] and not x["pass"]]
+    broke = [(x, y) for x, y in zip(before, after) if x["pass"] and not y["pass"]]
+    ids = ",".join(x["id"] for x in before)
+    return {"n": len(before), "both_pass": both, "fixed": len(fixed),
+            "fixed_had_not_parsed": sum(not x["parsed"] for x, _ in fixed),
+            "fixed_had_failed_tests": sum(x["parsed"] for x, _ in fixed),
+            "broke": len(broke), "broke_now_unparsed": sum(not y["parsed"] for _, y in broke),
+            "neither": len(before) - both - len(fixed) - len(broke),
+            "mcnemar_p": mcnemar_p(len(fixed), len(broke)),
+            "ids_sha1": hashlib.sha1(ids.encode()).hexdigest()[:12],
+            "before_bits": "".join("1" if x["pass"] else "0" for x in before),
+            "after_bits": "".join("1" if y["pass"] else "0" for y in after)}
 
 
 def _pieces(args):
@@ -143,9 +177,15 @@ def run(args):
         model = relay.Model(args.model)
         engine = gsm8k.engine_for(model, args, args.relay_device)
 
+        per_task = {}
+
         def ev(when):
             rec = evaluate(engine, tok, test, rewarder, args.eval_max_new, relay)
+            per_task[when] = rec.pop("per_task")
             gsm8k.log({"phase": "eval", "when": when, **rec}, args.out)
+            if args.out:
+                with open(f"{args.out}.eval-{when}.json", "w") as f:
+                    json.dump(per_task[when], f)
 
         if args.phase == "eval":
             ev("now")
@@ -169,6 +209,7 @@ def run(args):
             gsm8k.log(r, args.out)
         if not args.skip_eval:
             ev("after")
+            gsm8k.log({"phase": "paired", "seed": args.seed, **paired(per_task["before"], per_task["after"])}, args.out)
     finally:
         z.close()
 

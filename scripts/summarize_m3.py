@@ -22,3 +22,11 @@ if steps:
     print(f"per step: median {statistics.median(s['time_step'] for s in steps):.1f} s, "
           f"grading median {statistics.median(s['reward_seconds'] for s in steps):.2f} s; "
           f"total {steps[-1]['elapsed']:.0f} s")
+for r in recs:
+    if r.get("phase") == "paired":
+        print(f"paired, same {r['n']} tasks (seed {r['seed']}): both pass {r['both_pass']}, fixed {r['fixed']} "
+              f"({r['fixed_had_not_parsed']} had not parsed, {r['fixed_had_failed_tests']} had failed tests), "
+              f"broke {r['broke']} ({r['broke_now_unparsed']} now do not parse), neither {r['neither']}; "
+              f"McNemar exact p = {r['mcnemar_p']:.3g}")
+        print(f"tasks {r['ids_sha1']} before {r['before_bits']}")
+        print(f"tasks {r['ids_sha1']} after  {r['after_bits']}")
