@@ -40,8 +40,8 @@ environments speaking [OpenEnv](https://github.com/huggingface/OpenEnv)'s interf
    owned by root and out of other sandboxes, and the process limit counts only its own;
 2. mount, network, IPC, UTS and PID namespaces: no network interfaces up (no network at
    all), a private tmpfs over `/tmp`, `/var/tmp` and `/dev/shm` (its workspace, size-limited),
-   its own `/proc` in which it is process 1 and sees nothing else, and killing it ends every
-   process it started;
+   its own `/proc` in which it sees only itself and the namespace's init (a process that
+   only reaps), and closing the last sandbox of a tree ends every process left in it;
 3. limits: address space, CPU time, processes, open files, file size, no core dumps;
 4. all capabilities dropped and `no_new_privs` set, so no setuid program gives any back;
 5. a seccomp-BPF filter (`crucible/seccomp.py`): the kernel refuses internet sockets (only
@@ -99,6 +99,14 @@ first message with `SCM_CREDENTIALS`, and the kernel translates the pid into the
 view, the one the client can signal. Branches keep every limit and the seccomp filter
 (`tests/test_fork.py`: state and files carried over, branches diverging, branches of
 branches, a branch killed on a timeout while its siblings go on, 16 concurrent forks).
+
+A branch outlives the sandbox it was forked from, as a rollout tree needs when it closes a
+node whose children are still running. A sandbox and its branches share one PID namespace,
+whose init is not the sandbox but a separate process that only reaps; had the sandbox been
+the namespace's process 1, closing it would have taken every branch with it (the kernel ends
+a PID namespace with its init), which an earlier version did. When the last sandbox of a
+tree is closed the client kills that init, so every process left in the namespace ends too,
+including one that left its process group (`tests/test_fork.py`).
 
 Measured on 4 CPUs (`bench/fork.py`):
 

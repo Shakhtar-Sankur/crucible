@@ -99,7 +99,7 @@ def serve(sock, limits, layers):
     global _CAPTURE
     state = {"sock": sock, "clones": [], "workspace_root": os.getcwd()}
     scope = {"__name__": "__sandbox__"}
-    wire.send(sock, {"ready": True, "layers": layers})
+    wire.send_creds(sock, {"ready": True, "layers": layers})
     while True:
         _CAPTURE = os.path.join(os.getcwd(), ".crucible")
         sock = state["sock"]

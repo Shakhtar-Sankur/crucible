@@ -64,10 +64,14 @@ def enable_creds(sock):
 
 
 def send_creds(sock, obj):
+    """One write for header and body: another process may write to the same socket (at spawn,
+    the namespace's outer process does), and two writes could be interleaved with its own."""
     body = json.dumps(obj).encode()
+    data = _HDR.pack(len(body)) + body
     cred = _UCRED.pack(os.getpid(), os.getuid(), os.getgid())
-    sock.sendmsg([_HDR.pack(len(body))], [(socket.SOL_SOCKET, socket.SCM_CREDENTIALS, cred)])
-    sock.sendall(body)
+    sent = sock.sendmsg([data], [(socket.SOL_SOCKET, socket.SCM_CREDENTIALS, cred)])
+    if sent < len(data):
+        sock.sendall(data[sent:])
 
 
 def recv_creds(sock):

@@ -111,3 +111,53 @@ def test_many_branches_at_once(zygote):
             t.join()
         assert not errs, errs[:3]
         assert sorted(int(x) for x in out) == [41 + i for i in range(16)]
+
+
+def test_a_branch_outlives_the_sandbox_it_was_forked_from(zygote):
+    """Rollout trees close a node once its children exist; the children must live on."""
+    sb = zygote.spawn()
+    sb.exec("x = 5")
+    br = sb.fork()
+    grand = br.fork()
+    sb.close()
+    assert br.exec("print(x)")["stdout"] == "5\n"
+    br.close()
+    assert grand.exec("x += 1; print(x)")["stdout"] == "6\n"
+    grand.close()
+
+
+def _uid_processes(uid):
+    n = 0
+    for p in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            for line in open(f"/proc/{p}/status"):
+                if line.startswith("Uid:") and int(line.split()[1]) == uid:
+                    if open(f"/proc/{p}/stat").read().split()[2] != "Z":
+                        n += 1
+        except OSError:
+            pass
+    return n
+
+
+def test_closing_the_last_sandbox_of_a_tree_ends_every_process_in_it(zygote):
+    """Even one that left its process group, which killing groups alone would miss."""
+    sb = zygote.spawn()
+    if "user" not in sb.layers or not sb.layers.get("ns_pid"):
+        sb.close()
+        pytest.skip("needs its own user and PID namespace")
+    uid = sb.layers["user"]
+    sb.exec("import os, time\n"
+            "if os.fork() == 0:\n"
+            "    os.setsid()\n"
+            "    time.sleep(60)\n"
+            "    os._exit(0)\n")
+    br = sb.fork()
+    sb.close()
+    assert br.exec("print(1)")["stdout"] == "1\n"
+    assert _uid_processes(uid) >= 2          # the branch, the escaped process (and init)
+    br.close()
+    for _ in range(100):
+        if _uid_processes(uid) == 0:
+            break
+        threading.Event().wait(0.05)
+    assert _uid_processes(uid) == 0

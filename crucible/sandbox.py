@@ -26,9 +26,34 @@ class SandboxError(RuntimeError):
     pass
 
 
+class _Tree:
+    """A sandbox and the branches forked from it share one PID namespace, whose init is killed
+    (ending every process left in it) when the last of them is closed."""
+
+    def __init__(self, init_pid):
+        self.init_pid, self.open = init_pid, 0
+        self._lock = threading.Lock()
+
+    def add(self):
+        with self._lock:
+            self.open += 1
+        return self
+
+    def release(self):
+        with self._lock:
+            self.open -= 1
+            last = self.open == 0
+        if last and self.init_pid:
+            try:
+                os.kill(self.init_pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+
 class Sandbox:
-    def __init__(self, sock, runner_pid, layers, spawn_seconds, workdir=None):
+    def __init__(self, sock, runner_pid, layers, spawn_seconds, workdir=None, tree=None):
         self.sock, self.pid, self.layers = sock, runner_pid, layers
+        self.tree = (tree or _Tree(None)).add()
         self.spawn_seconds = spawn_seconds
         self.workdir = workdir or layers.get("workdir")
         self.alive = True
@@ -79,7 +104,8 @@ class Sandbox:
         if pid is None:
             sock.close()
             raise SandboxError("the branch did not identify itself")
-        return Sandbox(sock, pid, dict(self.layers), time.perf_counter() - t, workdir=hello["workdir"])
+        return Sandbox(sock, pid, dict(self.layers), time.perf_counter() - t,
+                       workdir=hello["workdir"], tree=self.tree)
 
     def kill(self):
         if self.alive:
@@ -90,6 +116,7 @@ class Sandbox:
                 except (ProcessLookupError, PermissionError):
                     pass
             self.sock.close()
+            self.tree.release()
             if not self.layers.get("tmpfs") and self.workdir and self.workdir.startswith("/tmp/crucible-"):
                 shutil.rmtree(self.workdir, ignore_errors=True)  # no private tmpfs to vanish with it
 
@@ -132,16 +159,23 @@ class Zygote:
             raise SandboxError(f"zygote: {reply}")
         sock = socket.socket(fileno=fds[0])
         sock.settimeout(timeout)
-        # Two messages: the process to kill ({"runner_pid"}) and {"ready"}. With a PID
-        # namespace they come from two processes, so in either order.
-        got = {}
-        while not ("runner_pid" in got and "ready" in got):
-            msg, _ = wire.recv(sock)
+        # Two messages: {"init_pid"} and the runner's {"ready"}, whose credentials give the
+        # runner's pid. With a PID namespace they come from two processes, so in either order.
+        got, runner_pid = {}, None
+        while not ("init_pid" in got and "ready" in got):
+            msg, pid = wire.recv_creds(sock)
             if "error" in msg:
                 sock.close()
                 raise SandboxError(msg["error"])
+            if "ready" in msg:
+                runner_pid = pid
             got.update(msg)
-        return Sandbox(sock, got["runner_pid"], got["layers"], time.perf_counter() - t)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 0)
+        if runner_pid is None:
+            sock.close()
+            raise SandboxError("the sandbox did not identify itself")
+        return Sandbox(sock, runner_pid, got["layers"], time.perf_counter() - t,
+                       tree=_Tree(got["init_pid"]))
 
     def close(self):
         try:

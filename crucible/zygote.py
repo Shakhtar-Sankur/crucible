@@ -5,9 +5,15 @@ with everything loaded in a fraction of the time a new interpreter takes.
 Protocol (on the socket inherited from the client, fd given by --fd):
   -> {"op": "spawn", "slot": int, "limits": {...}}
   <- {"pid": int}   with the new sandbox's socket attached (SCM_RIGHTS)
-The sandbox then speaks runner.py's protocol on that socket; its first message is
-{"runner_pid": outer pid}, the process to kill to end it (with a PID namespace, the
-namespace's init: killing it ends every process in the sandbox)."""
+The sandbox then speaks runner.py's protocol on that socket. Its first messages are
+{"init_pid": outer pid or null} and the runner's {"ready"}, sent with its credentials so the
+client learns the runner's pid as it sees it.
+
+With a PID namespace the runner is not the namespace's init: init is a separate process that
+only reaps, so the runner (process 2) and the branches forked from it each live in their own
+process group and can be killed alone, a branch outliving the sandbox it was forked from.
+Killing init ends every process in the namespace; the client does that when the last sandbox
+of the tree is closed."""
 
 import argparse
 import importlib
@@ -27,15 +33,34 @@ def _child(sock, client, limits, slot, features):
     if pidns:
         pid = os.fork()  # the next child is the namespace's init
         if pid:
-            wire.send(sock, {"runner_pid": pid})
+            wire.send(sock, {"init_pid": pid})
             sock.close()
-            _, status = os.waitpid(pid, 0)
+            os.waitpid(pid, 0)
             os._exit(0)
+        layers = isolate.finish(limits, layers, as_pid1=True)
+        if os.fork():
+            _init(sock)
+        os.setpgid(0, 0)
     else:
-        wire.send(sock, {"runner_pid": os.getpid()})
-    layers = isolate.finish(limits, layers, as_pid1=pidns)
+        wire.send(sock, {"init_pid": None})
+        layers = isolate.finish(limits, layers, as_pid1=False)
     runner.serve(sock, limits, layers)
     os._exit(0)
+
+
+def _init(sock):
+    """The PID namespace's init: reaps every process that ends (the runner, branches whose
+    parent is gone) and leaves when none is left, which ends the namespace."""
+    sock.close()
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, signal.SIG_IGN)
+    while True:
+        try:
+            os.waitpid(-1, 0)
+        except ChildProcessError:
+            os._exit(0)
+        except InterruptedError:
+            continue
 
 
 def main(argv=None):
@@ -58,6 +83,7 @@ def main(argv=None):
             wire.send(client, {"error": f"unknown op {msg.get('op')}"})
             continue
         ours, theirs = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+        wire.enable_creds(ours)  # the runner's first message carries its pid
         pid = os.fork()
         if pid == 0:
             ours.close()

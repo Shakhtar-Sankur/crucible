@@ -140,7 +140,7 @@ def test_sandboxes_do_not_see_each_other(zygote):
         r = b.exec("import os; print(os.listdir('.'), os.path.exists('secret.txt'))")
         assert "False" in r["stdout"]
         r = b.exec("import os; print(sorted(p for p in os.listdir('/proc') if p.isdigit()))")
-        assert r["stdout"].strip() == "['1']"
+        assert r["stdout"].strip() == "['1', '2']"     # its namespace's init and itself
 
 
 def test_isolation_layers_reported(zygote):
