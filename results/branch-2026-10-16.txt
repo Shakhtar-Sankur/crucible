@@ -1,0 +1,6 @@
+{"bench": "branch", "cpus": 4, "features": {"root": true, "uid_base": 200000, "kernel": "6.18.44-fc-v114", "setuid": true, "ns_user": false, "ns_mount": true, "ns_net": true, "ns_ipc": true, "ns_uts": true, "ns_pid": true, "no_new_privs": true, "seccomp": true}}
+{"k": 4, "depth": 1, "leaves": 4, "prefix_s": 0.333, "fork": {"steps": 5, "s": 0.42}, "replay": {"steps": 8, "s": 1.56}, "speedup": 3.7, "leaves_identical": "4/4"}
+{"k": 4, "depth": 2, "leaves": 16, "prefix_s": 0.333, "fork": {"steps": 21, "s": 0.97}, "replay": {"steps": 48, "s": 5.81}, "speedup": 6.0, "leaves_identical": "16/16"}
+{"k": 8, "depth": 2, "leaves": 64, "prefix_s": 0.333, "fork": {"steps": 73, "s": 2.32}, "replay": {"steps": 192, "s": 23.06}, "speedup": 10.0, "leaves_identical": "64/64"}
+{"k": 4, "depth": 3, "leaves": 64, "prefix_s": 0.333, "fork": {"steps": 85, "s": 2.21}, "replay": {"steps": 256, "s": 24.15}, "speedup": 10.9, "leaves_identical": "64/64"}
+{"nondeterministic_prefix": {"leaves": 16, "fork_distinct_prefix_states": 1, "replay_distinct_prefix_states": 16, "note": "forked leaves all share the one prefix the episode had; each replay rebuilt a different one"}}

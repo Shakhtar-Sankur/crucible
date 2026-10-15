@@ -28,7 +28,7 @@ environments speaking [OpenEnv](https://github.com/huggingface/OpenEnv)'s interf
 | M1 | Fork a live sandbox (memory copy-on-write, its files copied), for branching | done |
 | M2 | OpenEnv-compatible server and a coding environment (hidden unit tests give the reward), and a grader that reward hacks cannot pass | done |
 | M3 | ratchet's GRPO on coding problems with sandboxed rewards, 2× T4: MBPP pass@1 34.9% → 38.6% (mean of 3 seeds, p = 0.013), GPU idle time | done |
-| M4 | Branching rollouts from mid-episode snapshots: cost against replaying from the start | |
+| M4 | Branching rollouts from mid-episode snapshots: up to 10.9× less environment time than replaying from the start, with every leaf in the same state; replays of a prefix that records a time or a random id rebuild a different one each time | done |
 | M5 | Write-up | |
 
 ## M0: the sandbox
@@ -85,6 +85,11 @@ On a Kaggle notebook (4 CPUs, Python 3.13; no namespaces there, seccomp on): **5
 against 87 ms for a fresh interpreter (17×), **498 per second** against 26 with 16 in flight,
 and with numpy preloaded 5.4 ms against 204 ms (38×). All tests pass there except the one
 that needs namespaces (sandboxes not seeing each other's files and processes).
+
+Since M4 a sandbox with a PID namespace takes one more fork, for the namespace's own init (so
+branches outlive the sandbox they came from; see M1): on the same machine, run back to back,
+a median 8.7–9.5 ms against 6.7–7.6 ms before. The figures above predate it. Without PID
+namespaces, as on Kaggle, nothing changed.
 
 Not yet: CPU and memory accounting by cgroup rather than per-process limits.
 
@@ -213,6 +218,28 @@ What the numbers do and do not show:
   to 16–24 by steps 60–90.
 - The trainer–engine log-probability gap was measured only on step 1 (max 0.011), the one
   step with fresh samples; one step ahead, every later sample is one update behind.
+
+## M4: rollout trees, forked or replayed
+
+A branching rollout reaches each leaf through a shared prefix (here: a workspace of 200 files
+and an index over a 300,000-entry table, 0.33 s to build) and one more step per level, K
+branches at each. `bench/branch.py` builds every tree two ways: fork the snapshot at each
+node, or start a new sandbox per leaf and replay the prefix and the leaf's path (4 CPUs, one
+leaf at a time):
+
+| branches × depth | leaves | steps run, fork / replay | fork | replay | |
+|---|---|---|---|---|---|
+| 4 × 1 | 4 | 5 / 8 | 0.42 s | 1.56 s | 3.7× |
+| 4 × 2 | 16 | 21 / 48 | 0.97 s | 5.81 s | 6.0× |
+| 8 × 2 | 64 | 73 / 192 | 2.32 s | 23.1 s | **10.0×** |
+| 4 × 3 | 64 | 85 / 256 | 2.21 s | 24.2 s | **10.9×** |
+
+Every leaf ends in the same state either way (a digest of its Python state and files). That
+holds only because these steps are deterministic. When the prefix records something a
+replay cannot reproduce, as real environments do (a time, a random id: log lines, temporary
+names, ports), the 16 forked leaves of a 4 × 2 tree all share the one prefix the episode
+had, while the 16 replays rebuilt 16 different ones: replaying gives the policy a different
+environment from the one it acted in.
 
 ## Run it
 
