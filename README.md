@@ -29,7 +29,7 @@ environments speaking [OpenEnv](https://github.com/huggingface/OpenEnv)'s interf
 | M2 | OpenEnv-compatible server and a coding environment (hidden unit tests give the reward), and a grader that reward hacks cannot pass | done |
 | M3 | ratchet's GRPO on coding problems with sandboxed rewards, 2× T4: MBPP pass@1 34.9% → 38.6% (mean of 3 seeds, p = 0.013), GPU idle time | done |
 | M4 | Branching rollouts from mid-episode snapshots: up to 10.9× less environment time than replaying from the start, with every leaf in the same state; replays of a prefix that records a time or a random id rebuild a different one each time | done |
-| M5 | Write-up | |
+| M5 | Write-up: [study page](https://shakhtar-sankur.github.io/crucible/) covering M0–M4 | study page done; technical report in progress |
 
 ## M0: the sandbox
 
